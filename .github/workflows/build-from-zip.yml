@@ -1,0 +1,49 @@
+name: Build APK from uploaded ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Unpack project
+        run: |
+          unzip -q LILL_VOICE_STUDIO_QWEN3_BUILD_FIX.zip
+          ls -la LILL_VOICE_STUDIO_NEW
+
+      - name: Fetch GGML
+        run: |
+          git clone --depth 1 https://github.com/ggml-org/ggml.git LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/ggml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install native tools
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Build APK
+        working-directory: LILL_VOICE_STUDIO_NEW
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon -PqwenNativeBuild=true :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LILL-VOICE-STUDIO-QWEN3-ARM64
+          path: LILL_VOICE_STUDIO_NEW/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
