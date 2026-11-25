@@ -1,4 +1,3 @@
-
 name: Build APK from uploaded ZIP
 
 on:
@@ -23,12 +22,17 @@ jobs:
         run: |
           unzip -q LILL_VOICE_STUDIO_QWEN3_BUILD_FIX.zip
           test -f LILL_VOICE_STUDIO_NEW/gradlew
+          test -f LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/CMakeLists.txt
           echo "Project archive unpacked successfully"
 
-      - name: Download GGML dependency
+      - name: Download GGML revision required by qwen3-tts.cpp
         run: |
-          mkdir -p LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp
-          git clone --depth 1 https://github.com/ggml-org/ggml.git LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/ggml
+          git clone https://github.com/ggml-org/ggml.git LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/ggml
+          git -C LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/ggml checkout --detach af97976c7810cdabb1863172f31c432dab767de7
+          echo "Pinned GGML revision: $(git -C LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/ggml rev-parse HEAD)"
+          grep -R -n "ggml_flash_attn_ext_set_prec" LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/ggml/include
+          grep -R -n "ggml_diag_mask_inf" LILL_VOICE_STUDIO_NEW/external/qwen3-tts.cpp/ggml/include
+          echo "Required GGML APIs found"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -39,6 +43,7 @@ jobs:
       - name: Install Android SDK
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)
+          test -x "$SDKMANAGER"
           echo "Using SDK manager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses || true
           "$SDKMANAGER" --install \
@@ -47,6 +52,14 @@ jobs:
             "build-tools;36.0.0" \
             "ndk;27.2.12479018" \
             "cmake;3.22.1"
+
+      - name: Verify native build inputs
+        working-directory: LILL_VOICE_STUDIO_NEW
+        run: |
+          test -f external/qwen3-tts.cpp/ggml/include/ggml.h
+          test -f app/src/main/cpp/CMakeLists.txt
+          grep -R "ggml_flash_attn_ext_set_prec" -n external/qwen3-tts.cpp/src/transformer
+          echo "Native build inputs verified"
 
       - name: Build Android APK
         working-directory: LILL_VOICE_STUDIO_NEW
